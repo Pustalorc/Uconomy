@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using JetBrains.Annotations;
 using Rocket.API;
 using Rocket.Unturned.Chat;
 using Rocket.Unturned.Player;
@@ -8,20 +9,20 @@ namespace fr34kyn01535.Uconomy
 {
     public class CommandBalance : IRocketCommand
     {
-        public string Name => "balance";
+        [NotNull] public string Name => "balance";
 
-        public string Help => "Shows the current balance";
+        [NotNull] public string Help => "Shows the current balance";
 
 
         public AllowedCaller AllowedCaller => AllowedCaller.Player;
 
-        public string Syntax => "(player)";
+        [NotNull] public string Syntax => "(player)";
 
-        public List<string> Aliases => new List<string>();
+        [NotNull] public List<string> Aliases => new List<string>();
 
-        public List<string> Permissions => new List<string> {"uconomy.balance"};
+        [NotNull] public List<string> Permissions => new List<string> {"uconomy.balance"};
 
-        public void Execute(IRocketPlayer caller, params string[] command)
+        public void Execute(IRocketPlayer caller, [NotNull] params string[] command)
         {
             if (command.Length == 1)
             {

@@ -1,27 +1,31 @@
 ﻿using System.Collections.Generic;
+using System.Threading;
+using JetBrains.Annotations;
 using Rocket.API;
 using Rocket.Unturned.Chat;
 using Rocket.Unturned.Commands;
 using Rocket.Unturned.Player;
+using SDG.Unturned;
 using UnityEngine;
+using Logger = Rocket.Core.Logging.Logger;
 
 namespace fr34kyn01535.Uconomy
 {
     public class CommandPay : IRocketCommand
     {
-        public string Help => "Pays a specific player money from your account";
+        [NotNull] public string Help => "Pays a specific player money from your account";
 
-        public string Name => "pay";
+        [NotNull] public string Name => "pay";
 
         public AllowedCaller AllowedCaller => AllowedCaller.Both;
 
-        public string Syntax => "<player> <amount>";
+        [NotNull] public string Syntax => "<player> <amount>";
 
-        public List<string> Aliases => new List<string>();
+        [NotNull] public List<string> Aliases => new List<string>();
 
-        public List<string> Permissions => new List<string> {"uconomy.pay"};
+        [NotNull] public List<string> Permissions => new List<string> {"uconomy.pay"};
 
-        public void Execute(IRocketPlayer caller, params string[] command)
+        public void Execute(IRocketPlayer caller, [NotNull] params string[] command)
         {
             if (command.Length != 2)
             {
@@ -56,9 +60,21 @@ namespace fr34kyn01535.Uconomy
                 {
                     Uconomy.Instance.Database.IncreaseBalance(otherPlayer, amount);
                     if (otherPlayerOnline != null)
+                    {
+                        UnturnedChat.Say(caller,
+                            Uconomy.Instance.Translations.Instance.Translate("command_pay_private",
+                                otherPlayerOnline.CharacterName, amount,
+                                Uconomy.Instance.Configuration.Instance.MoneyName),
+                            UnturnedChat.GetColorFromName(Uconomy.MessageColor, Color.green));
                         UnturnedChat.Say(otherPlayerOnline,
                             Uconomy.Instance.Translations.Instance.Translate("command_pay_console", amount,
                                 Uconomy.Instance.Configuration.Instance.MoneyName),
+                            UnturnedChat.GetColorFromName(Uconomy.MessageColor, Color.green));
+                    }
+                    else
+                        UnturnedChat.Say(caller,
+                            Uconomy.Instance.Translations.Instance.Translate("command_pay_private", otherPlayer,
+                                amount, Uconomy.Instance.Configuration.Instance.MoneyName),
                             UnturnedChat.GetColorFromName(Uconomy.MessageColor, Color.green));
                 }
                 else

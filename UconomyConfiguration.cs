@@ -9,7 +9,7 @@ namespace fr34kyn01535.Uconomy
         public string DatabasePassword;
         public string DatabaseName;
         public string DatabaseTableName;
-        public int DatabasePort;
+        public ushort DatabasePort;
 
         public decimal InitialBalance;
         public string MoneySymbol;

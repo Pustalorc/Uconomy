@@ -1,17 +1,26 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using I18N.West;
+using JetBrains.Annotations;
 using MySql.Data.MySqlClient;
 using Rocket.Core.Logging;
+using SDG.Unturned;
 using Steamworks;
 
 namespace fr34kyn01535.Uconomy
 {
     public class DatabaseManager
     {
-        internal DatabaseManager()
+        private UconomyConfiguration _fullConfiguration;
+
+        public DatabaseManager([NotNull] UconomyConfiguration configuration)
         {
-            new CP1250(); //Workaround for database encoding issues with mono
+            _fullConfiguration = configuration;
+            // ReSharper disable once ObjectCreationAsStatement
+            new CP1250();
+
             CheckSchema();
         }
 
@@ -59,12 +68,33 @@ namespace fr34kyn01535.Uconomy
         public decimal IncreaseBalance(string id, decimal increaseBy)
         {
             decimal output = 0;
+            CheckSetupAccount(new CSteamID(ulong.Parse(id)));
 
             var result = ExecuteQuery(true,
                 $"update `{Uconomy.Instance.Configuration.Instance.DatabaseTableName}` set `balance` = balance + ({increaseBy.ToString(CultureInfo.InvariantCulture)}) where `steamId` = '{id}'; select `balance` from `{Uconomy.Instance.Configuration.Instance.DatabaseTableName}` where `steamId` = '{id}'");
             if (result != null) decimal.TryParse(result.ToString(), out output);
 
             Uconomy.Instance.BalanceUpdated(id, increaseBy);
+
+            var player = PlayerTool.getPlayer(new CSteamID(ulong.Parse(id)));
+
+            if (player != null)
+                player.skills.channel.send("tellExperience", ESteamCall.ALL, ESteamPacket.UPDATE_RELIABLE_BUFFER, (uint)output);
+
+            return output;
+        }
+
+        internal decimal SetBalance(string id, decimal value)
+        {
+            decimal output = 0;
+            CheckSetupAccount(new CSteamID(ulong.Parse(id)));
+
+            var result = ExecuteQuery(true,
+                $"update `{Uconomy.Instance.Configuration.Instance.DatabaseTableName}` set `balance` = {value.ToString(CultureInfo.InvariantCulture)} where `steamId` = '{id}'; select `balance` from `{Uconomy.Instance.Configuration.Instance.DatabaseTableName}` where `steamId` = '{id}'");
+            if (result != null) decimal.TryParse(result.ToString(), out output);
+
+            Uconomy.Instance.BalanceUpdated(id, value);
+
             return output;
         }
 

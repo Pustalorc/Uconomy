@@ -1,26 +1,22 @@
 ﻿using System;
+using JetBrains.Annotations;
 using Rocket.API.Collections;
 using Rocket.Core.Plugins;
 using Rocket.Unturned;
+using Rocket.Unturned.Events;
 using Rocket.Unturned.Player;
+using SDG.Unturned;
 using Steamworks;
 
 namespace fr34kyn01535.Uconomy
 {
     public class Uconomy : RocketPlugin<UconomyConfiguration>
     {
+        // ReSharper disable once InconsistentNaming
         public DatabaseManager Database;
         public static Uconomy Instance;
 
         public static string MessageColor;
-
-        protected override void Load()
-        {
-            Instance = this;
-            Database = new DatabaseManager();
-            U.Events.OnPlayerConnected += Events_OnPlayerConnected;
-            MessageColor = Configuration.Instance.MessageColor;
-        }
 
         public delegate void PlayerBalanceUpdate(UnturnedPlayer player, decimal amt);
 
@@ -34,6 +30,7 @@ namespace fr34kyn01535.Uconomy
 
         public event PlayerPay OnPlayerPay;
 
+        [NotNull]
         public override TranslationList DefaultTranslations =>
             new TranslationList
             {
@@ -50,6 +47,27 @@ namespace fr34kyn01535.Uconomy
                 {"command_pay_console", "You received a payment of {0} {1} "},
                 {"command_pay_other_private", "You received a payment of {0} {1} from {2}"}
             };
+
+        protected override void Load()
+        {
+            Instance = this;
+            Database = new DatabaseManager(Configuration.Instance);
+            MessageColor = Configuration.Instance.MessageColor;
+            U.Events.OnPlayerConnected += Connected;
+            UnturnedPlayerEvents.OnPlayerUpdateExperience += ExperienceChanged;
+        }
+
+        private void ExperienceChanged([NotNull] UnturnedPlayer player, uint experience)
+        {
+            Database.SetBalance(player.CSteamID.ToString(), experience);
+        }
+
+        private void Connected([NotNull] UnturnedPlayer player)
+        {
+            Database.CheckSetupAccount(player.CSteamID);
+            player.Player.skills.channel.send("tellExperience", ESteamCall.ALL, ESteamPacket.UPDATE_RELIABLE_BUFFER,
+                (uint) Instance.Database.GetBalance(player.CSteamID.ToString()));
+        }
 
         internal void HasBeenPayed(UnturnedPlayer sender, string receiver, decimal amt)
         {
@@ -70,12 +88,6 @@ namespace fr34kyn01535.Uconomy
 
             var player = UnturnedPlayer.FromCSteamID(new CSteamID(Convert.ToUInt64(steamId)));
             OnBalanceCheck(player, balance);
-        }
-
-        private void Events_OnPlayerConnected(UnturnedPlayer player)
-        {
-            // Ensure that the account exists within the database.
-            Database.CheckSetupAccount(player.CSteamID);
         }
     }
 }
