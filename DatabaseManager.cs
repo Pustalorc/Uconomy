@@ -1,45 +1,23 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Globalization;
-using System.Linq;
+﻿using System.Globalization;
+using System.Threading.Tasks;
 using I18N.West;
 using JetBrains.Annotations;
 using MySql.Data.MySqlClient;
-using Rocket.Core.Logging;
+using Pustalorc.Libraries.MySqlConnectorWrapper;
+using Pustalorc.Libraries.MySqlConnectorWrapper.Queries;
 using SDG.Unturned;
 using Steamworks;
 
 namespace fr34kyn01535.Uconomy
 {
-    public class DatabaseManager
+    public class DatabaseManager : ConnectorWrapper<UconomyConfiguration>
     {
-        private UconomyConfiguration _fullConfiguration;
-
-        public DatabaseManager([NotNull] UconomyConfiguration configuration)
+        public DatabaseManager([NotNull] UconomyConfiguration configuration) : base(configuration)
         {
-            _fullConfiguration = configuration;
             // ReSharper disable once ObjectCreationAsStatement
             new CP1250();
 
             CheckSchema();
-        }
-
-        private MySqlConnection CreateConnection()
-        {
-            MySqlConnection connection = null;
-            try
-            {
-                if (Uconomy.Instance.Configuration.Instance.DatabasePort == 0)
-                    Uconomy.Instance.Configuration.Instance.DatabasePort = 3306;
-                connection = new MySqlConnection(
-                    $"SERVER={Uconomy.Instance.Configuration.Instance.DatabaseAddress};DATABASE={Uconomy.Instance.Configuration.Instance.DatabaseName};UID={Uconomy.Instance.Configuration.Instance.DatabaseUsername};PASSWORD={Uconomy.Instance.Configuration.Instance.DatabasePassword};PORT={Uconomy.Instance.Configuration.Instance.DatabasePort};");
-            }
-            catch (Exception ex)
-            {
-                Logger.LogException(ex);
-            }
-
-            return connection;
         }
 
         /// <summary>
@@ -47,11 +25,12 @@ namespace fr34kyn01535.Uconomy
         /// </summary>
         /// <param name="id">The Steam 64 ID of the account to retrieve the balance from.</param>
         /// <returns>The balance of the account.</returns>
-        public decimal GetBalance(string id)
+        public async Task<decimal> GetBalance(ulong id)
         {
             decimal output = 0;
-            var result = ExecuteQuery(true,
-                $"select `balance` from `{Uconomy.Instance.Configuration.Instance.DatabaseTableName}` where `steamId` = '{id}';");
+            var result = await ExecuteQueryAsync(new Query(id,
+                $"SELECT `balance` FROM `{Configuration.DatabaseTableName}` WHERE `steamId`=@id;",
+                EQueryType.Scalar, null, true, new MySqlParameter("@id", id)));
 
             if (result != null) decimal.TryParse(result.ToString(), out output);
             Uconomy.Instance.OnBalanceChecked(id, output);
@@ -65,18 +44,24 @@ namespace fr34kyn01535.Uconomy
         /// <param name="id">Steam 64 ID of the account.</param>
         /// <param name="increaseBy">The amount that the account should be changed with (can be negative).</param>
         /// <returns>The new balance of the account.</returns>
-        public decimal IncreaseBalance(string id, decimal increaseBy)
+        public async Task<decimal> IncreaseBalance(ulong id, decimal increaseBy)
         {
             decimal output = 0;
-            CheckSetupAccount(new CSteamID(ulong.Parse(id)));
+            CheckSetupAccount(id);
 
-            var result = ExecuteQuery(true,
-                $"update `{Uconomy.Instance.Configuration.Instance.DatabaseTableName}` set `balance` = balance + ({increaseBy.ToString(CultureInfo.InvariantCulture)}) where `steamId` = '{id}'; select `balance` from `{Uconomy.Instance.Configuration.Instance.DatabaseTableName}` where `steamId` = '{id}'");
+            await ExecuteQueryAsync(new Query(null,
+                $"UPDATE `{Configuration.DatabaseTableName}` SET `balance`=`balance`+@increase WHERE `steamId`=@id;",
+                EQueryType.NonQuery, null, false, new MySqlParameter("@id", id),
+                new MySqlParameter("@increase", increaseBy.ToString(CultureInfo.InvariantCulture))));
+
+            var result = await ExecuteQueryAsync(new Query(id,
+                $"SELECT `balance` FROM `{Configuration.DatabaseTableName}` WHERE `steamId`=@id;", EQueryType.Scalar,
+                null, true, new MySqlParameter("@id", id)));
             if (result != null) decimal.TryParse(result.ToString(), out output);
 
             Uconomy.Instance.BalanceUpdated(id, increaseBy);
 
-            var player = PlayerTool.getPlayer(new CSteamID(ulong.Parse(id)));
+            var player = PlayerTool.getPlayer(new CSteamID(id));
 
             if (player != null)
                 player.skills.channel.send("tellExperience", ESteamCall.ALL, ESteamPacket.UPDATE_RELIABLE_BUFFER, (uint)output);
@@ -84,13 +69,19 @@ namespace fr34kyn01535.Uconomy
             return output;
         }
 
-        internal decimal SetBalance(string id, decimal value)
+        internal async Task<decimal> SetBalance(ulong id, decimal value)
         {
             decimal output = 0;
-            CheckSetupAccount(new CSteamID(ulong.Parse(id)));
+            CheckSetupAccount(id);
 
-            var result = ExecuteQuery(true,
-                $"update `{Uconomy.Instance.Configuration.Instance.DatabaseTableName}` set `balance` = {value.ToString(CultureInfo.InvariantCulture)} where `steamId` = '{id}'; select `balance` from `{Uconomy.Instance.Configuration.Instance.DatabaseTableName}` where `steamId` = '{id}'");
+            await ExecuteQueryAsync(new Query(null,
+                $"UPDATE `{Configuration.DatabaseTableName}` SET `balance`=@newBal WHERE `steamId`=@id;",
+                EQueryType.NonQuery, null, false, new MySqlParameter("@id", id),
+                new MySqlParameter("@newBal", value.ToString(CultureInfo.InvariantCulture))));
+
+            var result = await ExecuteQueryAsync(new Query(id,
+                $"SELECT `balance` FROM `{Configuration.DatabaseTableName}` WHERE `steamId`=@id;", EQueryType.Scalar,
+                null, true, new MySqlParameter("@id", id)));
             if (result != null) decimal.TryParse(result.ToString(), out output);
 
             Uconomy.Instance.BalanceUpdated(id, value);
@@ -102,66 +93,28 @@ namespace fr34kyn01535.Uconomy
         /// Ensures that the account exists in the database and creates it if it isn't.
         /// </summary>
         /// <param name="id">Steam 64 ID of the account to ensure its existence.</param>
-        public void CheckSetupAccount(CSteamID id)
+        /// <returns>A bool, where true means the account has been setup, false means it already exists.</returns>
+        public async Task<bool> CheckSetupAccount(ulong id)
         {
             var exists = 0;
-            var result = ExecuteQuery(true,
-                $"SELECT EXISTS(SELECT 1 FROM `{Uconomy.Instance.Configuration.Instance.DatabaseTableName}` WHERE `steamId` ='{id}' LIMIT 1);");
+            var result = await ExecuteQueryAsync(new Query(id))
+            var result = RequestQueryExecute(false, new Query() $"SELECT FROM `{Configuration.DatabaseName}SELECT EXISTS(SELECT 1 FROM `{Configuration.DatabaseTableName}` WHERE `steamId` ='{id}' LIMIT 1);");
 
             if (result != null) int.TryParse(result.ToString(), out exists);
 
             if (exists == 0)
                 ExecuteQuery(false,
-                    $"insert ignore into `{Uconomy.Instance.Configuration.Instance.DatabaseTableName}` (balance,steamId,lastUpdated) values({Uconomy.Instance.Configuration.Instance.InitialBalance.ToString(CultureInfo.InvariantCulture)},'{id}',now())");
+                    $"insert ignore into `{Configuration.DatabaseTableName}` (balance,steamId,lastUpdated) values({Configuration.InitialBalance.ToString(CultureInfo.InvariantCulture)},'{id}',now())");
         }
 
         internal void CheckSchema()
         {
             var test = ExecuteQuery(true,
-                $"show tables like '{Uconomy.Instance.Configuration.Instance.DatabaseTableName}'");
+                $"show tables like '{Configuration.DatabaseTableName}'");
 
             if (test == null)
                 ExecuteQuery(false,
-                    $"CREATE TABLE `{Uconomy.Instance.Configuration.Instance.DatabaseTableName}` (`steamId` varchar(32) NOT NULL,`balance` decimal(15,2) NOT NULL DEFAULT '25.00',`lastUpdated` timestamp NOT NULL DEFAULT NOW() ON UPDATE CURRENT_TIMESTAMP,PRIMARY KEY (`steamId`)) ");
-        }
-
-        /// <summary>
-        /// Executes a MySql query.
-        /// </summary>
-        /// <param name="isScalar">If the query is expected to return a value.</param>
-        /// <param name="query">The query to execute.</param>
-        /// <returns>The value if isScalar is true, null otherwise.</returns>
-        public object ExecuteQuery(bool isScalar, string query)
-        {
-            // This method is to reduce the amount of copy paste that there was within this class.
-            // Initiate result and connection globally instead of within TryCatch context.
-            var connection = CreateConnection();
-            object result = null;
-
-            try
-            {
-                // Initialize command within try context, and execute within it as well.
-                var command = connection.CreateCommand();
-                command.CommandText = query;
-
-                connection.Open();
-                if (isScalar)
-                    result = command.ExecuteScalar();
-                else
-                    command.ExecuteNonQuery();
-            }
-            catch (Exception ex)
-            {
-                // Catch and log any errors during execution, like connection or similar.
-                Logger.LogException(ex);
-            }
-            finally
-            {
-                // No matter what happens, close the connection at the end of execution.
-                connection.Close();
-            }
-
-            return result;
+                    $"CREATE TABLE `{Configuration.DatabaseTableName}` (`steamId` varchar(32) NOT NULL,`balance` decimal(15,2) NOT NULL DEFAULT '25.00',`lastUpdated` timestamp NOT NULL DEFAULT NOW() ON UPDATE CURRENT_TIMESTAMP,PRIMARY KEY (`steamId`)) ");
         }
     }
 }

@@ -26,7 +26,7 @@ namespace fr34kyn01535.Uconomy
 
         public event PlayerBalanceCheck OnBalanceCheck;
 
-        public delegate void PlayerPay(UnturnedPlayer sender, string receiver, decimal amt);
+        public delegate void PlayerPay(UnturnedPlayer sender, ulong receiver, decimal amt);
 
         public event PlayerPay OnPlayerPay;
 
@@ -69,12 +69,12 @@ namespace fr34kyn01535.Uconomy
                 (uint) Instance.Database.GetBalance(player.CSteamID.ToString()));
         }
 
-        internal void HasBeenPayed(UnturnedPlayer sender, string receiver, decimal amt)
+        internal void HasBeenPayed(UnturnedPlayer sender, ulong receiver, decimal amt)
         {
             OnPlayerPay?.Invoke(sender, receiver, amt);
         }
 
-        internal void BalanceUpdated(string steamId, decimal amt)
+        internal void BalanceUpdated(ulong steamId, decimal amt)
         {
             if (OnBalanceUpdate == null) return;
 
@@ -82,11 +82,11 @@ namespace fr34kyn01535.Uconomy
             OnBalanceUpdate(player, amt);
         }
 
-        internal void OnBalanceChecked(string steamId, decimal balance)
+        internal void OnBalanceChecked(ulong steamId, decimal balance)
         {
             if (OnBalanceCheck == null) return;
 
-            var player = UnturnedPlayer.FromCSteamID(new CSteamID(Convert.ToUInt64(steamId)));
+            var player = UnturnedPlayer.FromCSteamID(new CSteamID(steamId));
             OnBalanceCheck(player, balance);
         }
     }
