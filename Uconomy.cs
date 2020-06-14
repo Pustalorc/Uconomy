@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Threading;
 using JetBrains.Annotations;
 using Rocket.API.Collections;
 using Rocket.Core.Plugins;
@@ -34,18 +35,22 @@ namespace fr34kyn01535.Uconomy
         public override TranslationList DefaultTranslations =>
             new TranslationList
             {
-                {"command_balance_show", "Your current balance is: {0} {1} {2}"},
-                {"command_balance_error_player_not_found", "Failed to find player!"},
-                {"command_balance_check_noPermissions", "Insufficent Permissions!"},
-                {"command_balance_show_otherPlayer", "{0}'s current balance is: {0} {1} {2}"},
-                {"command_pay_invalid", "Invalid arguments"},
-                {"command_pay_error_pay_self", "You cant pay yourself"},
-                {"command_pay_error_invalid_amount", "Invalid amount"},
-                {"command_pay_error_cant_afford", "Your balance does not allow this payment"},
-                {"command_pay_error_player_not_found", "Failed to find player"},
-                {"command_pay_private", "You paid {0} {1} {2}"},
-                {"command_pay_console", "You received a payment of {0} {1} "},
-                {"command_pay_other_private", "You received a payment of {0} {1} from {2}"}
+                {"setbalance_usage", "Incorrect usage, correct usage: /setbalance <player> <amount>"},
+                {"player_not_found", "Failed to find a player!"},
+                {"invalid_amount_under_zero", "Invalid amount provided. Cannot be under 0."},
+                {"setbalance_private", "Set {0}'s balance to {1} {2} {3}."},
+                {"setbalance_other", "Your balance was set to {0} {1} {2} by {3}."},
+                {"pay_usage", "Incorrect usage, correct usage: /pay <player> <amount>"},
+                {"pay_error_pay_self", "You cant pay yourself."},
+                {"pay_error_cant_afford", "Your balance does not allow for this payment."},
+                {"pay_sent", "You paid {0} a total of {0} {1} {2}."},
+                {"pay_received", "You received a payment of {0} {1} {2} from {3}."},
+                {"balance_check_other_no_perms", "Insufficient Permissions!"},
+                {"balance_other", "{0}'s current balance is: {1} {2} {3}."},
+                {"balance_self", "Your current balance is: {0} {1} {2}."},
+                {"cannot_run_console", "Cannot run this command with the arguments provided from console."},
+                {"lowered_balance", "Lowered the balance of {0} by {1} {2} {3}."},
+                {"balance_lowered", "Your balance was lowered by {0} {1} {2}. This action was done by {3}."}
             };
 
         protected override void Load()
@@ -59,14 +64,23 @@ namespace fr34kyn01535.Uconomy
 
         private void ExperienceChanged([NotNull] UnturnedPlayer player, uint experience)
         {
-            Database.SetBalance(player.CSteamID.ToString(), experience);
+            // We don't care if we are not waiting, as we are setting, and we are on the main thread.
+#pragma warning disable 4014
+            Database.SetBalance(player.CSteamID.m_SteamID, experience);
+#pragma warning restore 4014
         }
 
         private void Connected([NotNull] UnturnedPlayer player)
         {
-            Database.CheckSetupAccount(player.CSteamID);
-            player.Player.skills.channel.send("tellExperience", ESteamCall.ALL, ESteamPacket.UPDATE_RELIABLE_BUFFER,
-                (uint) Instance.Database.GetBalance(player.CSteamID.ToString()));
+            ThreadPool.QueueUserWorkItem(async o =>
+            {
+                await Database.CheckSetupAccount(player.CSteamID.m_SteamID);
+                var balance = (uint) await Instance.Database.GetBalance(player.CSteamID.m_SteamID);
+
+                Rocket.Core.Utils.TaskDispatcher.QueueOnMainThread(() =>
+                    player.Player.skills.channel.send("tellExperience", ESteamCall.ALL,
+                        ESteamPacket.UPDATE_RELIABLE_BUFFER, balance));
+            });
         }
 
         internal void HasBeenPayed(UnturnedPlayer sender, ulong receiver, decimal amt)

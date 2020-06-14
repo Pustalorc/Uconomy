@@ -1,12 +1,11 @@
 ﻿using System.Collections.Generic;
+using System.Linq;
 using JetBrains.Annotations;
 using Rocket.API;
 using Rocket.Unturned.Chat;
-using Rocket.Unturned.Commands;
-using Rocket.Unturned.Player;
 using UnityEngine;
 
-namespace fr34kyn01535.Uconomy
+namespace fr34kyn01535.Uconomy.Commands
 {
     public class CommandLowerBalance : IRocketCommand
     {
@@ -20,81 +19,53 @@ namespace fr34kyn01535.Uconomy
 
         [NotNull] public List<string> Aliases => new List<string>();
 
-        [NotNull] public List<string> Permissions => new List<string> { "uconomy.lowerbalance" };
+        [NotNull] public List<string> Permissions => new List<string> {"uconomy.lowerbalance"};
 
         public void Execute(IRocketPlayer caller, [NotNull] params string[] command)
         {
-            if (command.Length != 2)
+            var args = command.ToList();
+            if (args.Count < 2)
             {
-                UnturnedChat.Say(caller, Uconomy.Instance.Translations.Instance.Translate("command_lowerbalance_invalid"),
+                UnturnedChat.Say(caller, Uconomy.Instance.Translations.Instance.Translate("pay_usage"),
                     UnturnedChat.GetColorFromName(Uconomy.MessageColor, Color.green));
                 return;
             }
 
-            var otherPlayer = command.GetCSteamIDParameter(0)?.ToString();
-            var otherPlayerOnline = UnturnedPlayer.FromName(command[0]);
-            if (otherPlayerOnline != null) otherPlayer = otherPlayerOnline.Id;
+            var target = args.GetIRocketPlayer(out var index);
+            if (index > -1)
+                args.RemoveAt(index);
 
-            if (otherPlayer != null)
+            var amount = args.GetDecimal(out index);
+            if (index > -1)
+                args.RemoveAt(index);
+
+            if (target == null)
             {
-                if (!decimal.TryParse(command[1], out var amount) || amount <= 0)
-                {
-                    UnturnedChat.Say(caller,
-                        Uconomy.Instance.Translations.Instance.Translate("command_lowerbalance_error_invalid_amount"),
-                        UnturnedChat.GetColorFromName(Uconomy.MessageColor, Color.green));
-                    return;
-                }
-
-                if (caller is ConsolePlayer)
-                {
-                    Uconomy.Instance.Database.IncreaseBalance(otherPlayer, -amount);
-                    if (otherPlayerOnline != null)
-                    {
-                        UnturnedChat.Say(caller,
-                            Uconomy.Instance.Translations.Instance.Translate("command_lowerbalance_private",
-                                otherPlayerOnline.CharacterName, amount,
-                                Uconomy.Instance.Configuration.Instance.MoneyName),
-                            UnturnedChat.GetColorFromName(Uconomy.MessageColor, Color.green));
-                        UnturnedChat.Say(otherPlayerOnline,
-                            Uconomy.Instance.Translations.Instance.Translate("command_lowerbalance_console", amount,
-                                Uconomy.Instance.Configuration.Instance.MoneyName),
-                            UnturnedChat.GetColorFromName(Uconomy.MessageColor, Color.green));
-                    }
-                    else
-                        UnturnedChat.Say(caller,
-                            Uconomy.Instance.Translations.Instance.Translate("command_lowerbalance_private", otherPlayer,
-                                amount, Uconomy.Instance.Configuration.Instance.MoneyName),
-                            UnturnedChat.GetColorFromName(Uconomy.MessageColor, Color.green));
-                }
-                else
-                {
-                    Uconomy.Instance.Database.IncreaseBalance(otherPlayer, -amount);
-                    if (otherPlayerOnline != null)
-                    {
-                        UnturnedChat.Say(otherPlayerOnline.CSteamID,
-                            Uconomy.Instance.Translations.Instance.Translate("command_lowerbalance_other_private", amount,
-                                Uconomy.Instance.Configuration.Instance.MoneyName, caller.DisplayName),
-                            UnturnedChat.GetColorFromName(Uconomy.MessageColor, Color.green));
-                        UnturnedChat.Say(caller,
-                                Uconomy.Instance.Translations.Instance.Translate("command_lowerbalance_private",
-                                    otherPlayerOnline.CharacterName, amount,
-                                    Uconomy.Instance.Configuration.Instance.MoneyName),
-                                UnturnedChat.GetColorFromName(Uconomy.MessageColor, Color.green));
-                    }
-                    else
-                        UnturnedChat.Say(caller,
-                            Uconomy.Instance.Translations.Instance.Translate("command_lowerbalance_private", otherPlayer,
-                                amount, Uconomy.Instance.Configuration.Instance.MoneyName),
-                            UnturnedChat.GetColorFromName(Uconomy.MessageColor, Color.green));
-
-                    Uconomy.Instance.BalanceUpdated(otherPlayer, -amount);
-                }
+                UnturnedChat.Say(caller, Uconomy.Instance.Translations.Instance.Translate("player_not_found"),
+                    UnturnedChat.GetColorFromName(Uconomy.MessageColor, Color.green));
+                return;
             }
-            else
+
+            if (amount <= 0)
             {
-                UnturnedChat.Say(caller,
-                    Uconomy.Instance.Translations.Instance.Translate("command_lowerbalance_error_player_not_found"));
+                UnturnedChat.Say(caller, Uconomy.Instance.Translations.Instance.Translate("invalid_amount_under_zero"),
+                    UnturnedChat.GetColorFromName(Uconomy.MessageColor, Color.green));
+                return;
             }
+
+            Uconomy.Instance.Database.IncreaseBalance(ulong.Parse(target.Id), -amount);
+
+            UnturnedChat.Say(caller,
+                Uconomy.Instance.Translations.Instance.Translate("lowered_balance", target.DisplayName,
+                    Uconomy.Instance.Configuration.Instance.MoneySymbol, amount,
+                    Uconomy.Instance.Configuration.Instance.MoneyName),
+                UnturnedChat.GetColorFromName(Uconomy.MessageColor, Color.green));
+
+            UnturnedChat.Say(target,
+                Uconomy.Instance.Translations.Instance.Translate("balance_lowered",
+                    Uconomy.Instance.Configuration.Instance.MoneySymbol, amount,
+                    Uconomy.Instance.Configuration.Instance.MoneyName, caller.DisplayName),
+                UnturnedChat.GetColorFromName(Uconomy.MessageColor, Color.green));
         }
     }
 }

@@ -28,6 +28,7 @@ namespace fr34kyn01535.Uconomy
         public async Task<decimal> GetBalance(ulong id)
         {
             decimal output = 0;
+
             var result = await ExecuteQueryAsync(new Query(id,
                 $"SELECT `balance` FROM `{Configuration.DatabaseTableName}` WHERE `steamId`=@id;",
                 EQueryType.Scalar, null, true, new MySqlParameter("@id", id)));
@@ -47,7 +48,8 @@ namespace fr34kyn01535.Uconomy
         public async Task<decimal> IncreaseBalance(ulong id, decimal increaseBy)
         {
             decimal output = 0;
-            CheckSetupAccount(id);
+
+            await CheckSetupAccount(id);
 
             await ExecuteQueryAsync(new Query(null,
                 $"UPDATE `{Configuration.DatabaseTableName}` SET `balance`=`balance`+@increase WHERE `steamId`=@id;",
@@ -64,7 +66,8 @@ namespace fr34kyn01535.Uconomy
             var player = PlayerTool.getPlayer(new CSteamID(id));
 
             if (player != null)
-                player.skills.channel.send("tellExperience", ESteamCall.ALL, ESteamPacket.UPDATE_RELIABLE_BUFFER, (uint)output);
+                player.skills.channel.send("tellExperience", ESteamCall.ALL, ESteamPacket.UPDATE_RELIABLE_BUFFER,
+                    (uint) output);
 
             return output;
         }
@@ -72,7 +75,8 @@ namespace fr34kyn01535.Uconomy
         internal async Task<decimal> SetBalance(ulong id, decimal value)
         {
             decimal output = 0;
-            CheckSetupAccount(id);
+
+            await CheckSetupAccount(id);
 
             await ExecuteQueryAsync(new Query(null,
                 $"UPDATE `{Configuration.DatabaseTableName}` SET `balance`=@newBal WHERE `steamId`=@id;",
@@ -96,25 +100,31 @@ namespace fr34kyn01535.Uconomy
         /// <returns>A bool, where true means the account has been setup, false means it already exists.</returns>
         public async Task<bool> CheckSetupAccount(ulong id)
         {
-            var exists = 0;
-            var result = await ExecuteQueryAsync(new Query(id))
-            var result = RequestQueryExecute(false, new Query() $"SELECT FROM `{Configuration.DatabaseName}SELECT EXISTS(SELECT 1 FROM `{Configuration.DatabaseTableName}` WHERE `steamId` ='{id}' LIMIT 1);");
+            var result = await ExecuteQueryAsync(new Query(id,
+                $"SELECT `balance` FROM `{Configuration.DatabaseTableName}` WHERE `steamId`=@id;", EQueryType.Scalar,
+                null, true, new MySqlParameter("@id", id)));
 
-            if (result != null) int.TryParse(result.ToString(), out exists);
+            if (result != null && decimal.TryParse(result.ToString(), out _)) return false;
 
-            if (exists == 0)
-                ExecuteQuery(false,
-                    $"insert ignore into `{Configuration.DatabaseTableName}` (balance,steamId,lastUpdated) values({Configuration.InitialBalance.ToString(CultureInfo.InvariantCulture)},'{id}',now())");
+            await ExecuteQueryAsync(new Query(null,
+                $"INSERT IGNORE INTO `{Configuration.DatabaseTableName}` (`balance`,`steamId`) values(@initialBalance,@id);",
+                EQueryType.NonQuery, null, false,
+                new MySqlParameter("@initialBalance",
+                    Configuration.InitialBalance.ToString(CultureInfo.InvariantCulture)),
+                new MySqlParameter("@id", id)));
+
+            return true;
         }
 
-        internal void CheckSchema()
+        private void CheckSchema()
         {
-            var test = ExecuteQuery(true,
-                $"show tables like '{Configuration.DatabaseTableName}'");
+            var test = ExecuteQuery(new Query(null, $"SHOW TABLES LIKE '{Configuration.DatabaseTableName}';",
+                EQueryType.Scalar));
 
-            if (test == null)
-                ExecuteQuery(false,
-                    $"CREATE TABLE `{Configuration.DatabaseTableName}` (`steamId` varchar(32) NOT NULL,`balance` decimal(15,2) NOT NULL DEFAULT '25.00',`lastUpdated` timestamp NOT NULL DEFAULT NOW() ON UPDATE CURRENT_TIMESTAMP,PRIMARY KEY (`steamId`)) ");
+            if (test.Output == null)
+                ExecuteQuery(new Query(null,
+                    $"CREATE TABLE `{Configuration.DatabaseTableName}` (`steamId` BIGINT UNSIGNED NOT NULL, `balance` decimal(15,2) NOT NULL, `lastUpdated` timestamp NOT NULL DEFAULT NOW() ON UPDATE CURRENT_TIMESTAMP, PRIMARY KEY (`steamId`));",
+                    EQueryType.NonQuery));
         }
     }
 }
