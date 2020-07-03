@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using JetBrains.Annotations;
 using Rocket.API;
 using Rocket.Unturned.Chat;
@@ -27,8 +28,8 @@ namespace fr34kyn01535.Uconomy.Commands
 
             if (args.Count < 2)
             {
-                UnturnedChat.Say(caller, Uconomy.Instance.Translations.Instance.Translate("setbalance_usage"),
-                    UnturnedChat.GetColorFromName(Uconomy.MessageColor, Color.green));
+                UnturnedChat.Say(caller, Uconomy.Instance.Translate("setbalance_usage"),
+                    UnturnedChat.GetColorFromName(Uconomy.Instance.Configuration.Instance.MessageColor, Color.green));
                 return;
             }
 
@@ -42,31 +43,36 @@ namespace fr34kyn01535.Uconomy.Commands
 
             if (target == null)
             {
-                UnturnedChat.Say(caller, Uconomy.Instance.Translations.Instance.Translate("player_not_found"),
-                    UnturnedChat.GetColorFromName(Uconomy.MessageColor, Color.green));
+                UnturnedChat.Say(caller, Uconomy.Instance.Translate("player_not_found"),
+                    UnturnedChat.GetColorFromName(Uconomy.Instance.Configuration.Instance.MessageColor, Color.green));
                 return;
             }
 
             if (amount <= 0)
             {
-                UnturnedChat.Say(caller, Uconomy.Instance.Translations.Instance.Translate("invalid_amount_under_zero"),
-                    UnturnedChat.GetColorFromName(Uconomy.MessageColor, Color.green));
+                UnturnedChat.Say(caller, Uconomy.Instance.Translate("invalid_amount_under_zero"),
+                    UnturnedChat.GetColorFromName(Uconomy.Instance.Configuration.Instance.MessageColor, Color.green));
                 return;
             }
 
-            Uconomy.Instance.Database.SetBalance(ulong.Parse(target.Id), amount);
+            ModifyAndMention(caller, target, amount);
+        }
+
+        public static async Task ModifyAndMention([NotNull] IRocketPlayer caller, [NotNull] IRocketPlayer target, decimal amount)
+        {
+            await Uconomy.Instance.database.SetBalance(ulong.Parse(target.Id), amount);
 
             UnturnedChat.Say(caller,
-                Uconomy.Instance.Translations.Instance.Translate("setbalance_private", target.DisplayName,
+                Uconomy.Instance.Translate("setbalance_private", target.DisplayName,
                     Uconomy.Instance.Configuration.Instance.MoneySymbol, amount,
                     Uconomy.Instance.Configuration.Instance.MoneyName),
-                UnturnedChat.GetColorFromName(Uconomy.MessageColor, Color.green));
+                UnturnedChat.GetColorFromName(Uconomy.Instance.Configuration.Instance.MessageColor, Color.green));
 
             UnturnedChat.Say(target,
-                Uconomy.Instance.Translations.Instance.Translate("setbalance_other",
+                Uconomy.Instance.Translate("setbalance_other",
                     Uconomy.Instance.Configuration.Instance.MoneySymbol, amount,
                     Uconomy.Instance.Configuration.Instance.MoneyName, caller.DisplayName),
-                UnturnedChat.GetColorFromName(Uconomy.MessageColor, Color.green));
+                UnturnedChat.GetColorFromName(Uconomy.Instance.Configuration.Instance.MessageColor, Color.green));
         }
     }
 }

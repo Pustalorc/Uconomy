@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using JetBrains.Annotations;
 using Rocket.API;
 using Rocket.Unturned.Chat;
@@ -22,7 +23,12 @@ namespace fr34kyn01535.Uconomy.Commands
 
         [NotNull] public List<string> Permissions => new List<string> {"uconomy.balance"};
 
-        public async void Execute(IRocketPlayer caller, [NotNull] params string[] command)
+        public void Execute(IRocketPlayer caller, [NotNull] params string[] command)
+        {
+            GetAndDisplayBalance(caller, command);
+        }
+
+        public async Task GetAndDisplayBalance(IRocketPlayer caller, [NotNull] params string[] command)
         {
             var args = command.ToList();
 
@@ -35,17 +41,17 @@ namespace fr34kyn01535.Uconomy.Commands
                 if (!caller.HasPermission("balance.check"))
                 {
                     UnturnedChat.Say(caller, Uconomy.Instance.Translate("balance_check_other_no_perms"),
-                        UnturnedChat.GetColorFromName(Uconomy.MessageColor, Color.green));
+                        UnturnedChat.GetColorFromName(Uconomy.Instance.Configuration.Instance.MessageColor, Color.green));
                     return;
                 }
 
-                var otherBalance = await Uconomy.Instance.Database.GetBalance(ulong.Parse(target.Id));
+                var otherBalance = await Uconomy.Instance.database.GetBalance(ulong.Parse(target.Id));
 
                 UnturnedChat.Say(caller,
                     Uconomy.Instance.Translate("balance_other", target.DisplayName,
                         Uconomy.Instance.Configuration.Instance.MoneySymbol, otherBalance,
                         Uconomy.Instance.Configuration.Instance.MoneyName),
-                    UnturnedChat.GetColorFromName(Uconomy.MessageColor, Color.green));
+                    UnturnedChat.GetColorFromName(Uconomy.Instance.Configuration.Instance.MessageColor, Color.green));
 
                 return;
             }
@@ -53,16 +59,16 @@ namespace fr34kyn01535.Uconomy.Commands
             if (caller is ConsolePlayer)
             {
                 UnturnedChat.Say(caller, Uconomy.Instance.Translate("cannot_run_console"),
-                    UnturnedChat.GetColorFromName(Uconomy.MessageColor, Color.green));
+                    UnturnedChat.GetColorFromName(Uconomy.Instance.Configuration.Instance.MessageColor, Color.green));
                 return;
             }
 
-            var balance = await Uconomy.Instance.Database.GetBalance(ulong.Parse(caller.Id));
+            var balance = await Uconomy.Instance.database.GetBalance(ulong.Parse(caller.Id));
             UnturnedChat.Say(caller,
-                Uconomy.Instance.Translations.Instance.Translate("balance_self",
+                Uconomy.Instance.Translate("balance_self",
                     Uconomy.Instance.Configuration.Instance.MoneySymbol, balance,
                     Uconomy.Instance.Configuration.Instance.MoneyName),
-                UnturnedChat.GetColorFromName(Uconomy.MessageColor, Color.green));
+                UnturnedChat.GetColorFromName(Uconomy.Instance.Configuration.Instance.MessageColor, Color.green));
         }
     }
 }

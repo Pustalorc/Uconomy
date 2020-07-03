@@ -11,15 +11,13 @@ using Steamworks;
 
 namespace fr34kyn01535.Uconomy
 {
-    public class Uconomy : RocketPlugin<UconomyConfiguration>
+    public sealed class Uconomy : RocketPlugin<UconomyConfiguration>
     {
-        // ReSharper disable once InconsistentNaming
-        public DatabaseManager Database;
         public static Uconomy Instance;
 
-        public static string MessageColor;
+        public DatabaseManager database;
 
-        public delegate void PlayerBalanceUpdate(UnturnedPlayer player, decimal amt);
+        public delegate void PlayerBalanceUpdate(UnturnedPlayer player, decimal newBalance);
 
         public event PlayerBalanceUpdate OnBalanceUpdate;
 
@@ -56,27 +54,39 @@ namespace fr34kyn01535.Uconomy
         protected override void Load()
         {
             Instance = this;
-            Database = new DatabaseManager(Configuration.Instance);
-            MessageColor = Configuration.Instance.MessageColor;
+            database = new DatabaseManager(Configuration.Instance);
+
             U.Events.OnPlayerConnected += Connected;
-            UnturnedPlayerEvents.OnPlayerUpdateExperience += ExperienceChanged;
+
+            if (Configuration.Instance.SyncBalanceToExp)
+                UnturnedPlayerEvents.OnPlayerUpdateExperience += ExperienceChanged;
+        }
+
+        protected override void Unload()
+        {
+            if (Configuration.Instance.SyncBalanceToExp)
+                UnturnedPlayerEvents.OnPlayerUpdateExperience -= ExperienceChanged;
+
+            U.Events.OnPlayerConnected -= Connected;
+
+            database = null;
+            Instance = null;
         }
 
         private void ExperienceChanged([NotNull] UnturnedPlayer player, uint experience)
         {
-            // We don't care if we are not waiting, as we are setting, and we are on the main thread.
-#pragma warning disable 4014
-            Database.SetBalance(player.CSteamID.m_SteamID, experience);
-#pragma warning restore 4014
+            database.SetBalance(player.CSteamID.m_SteamID, experience);
         }
 
         private void Connected([NotNull] UnturnedPlayer player)
         {
             ThreadPool.QueueUserWorkItem(async o =>
             {
-                await Database.CheckSetupAccount(player.CSteamID.m_SteamID);
-                var balance = (uint) await Instance.Database.GetBalance(player.CSteamID.m_SteamID);
+                await database.CheckSetupAccount(player.CSteamID.m_SteamID);
 
+                if (!Configuration.Instance.UseCache) return;
+
+                var balance = (uint) await Instance.database.GetBalance(player.CSteamID.m_SteamID);
                 Rocket.Core.Utils.TaskDispatcher.QueueOnMainThread(() =>
                     player.Player.skills.channel.send("tellExperience", ESteamCall.ALL,
                         ESteamPacket.UPDATE_RELIABLE_BUFFER, balance));

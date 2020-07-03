@@ -15,10 +15,10 @@ namespace fr34kyn01535.Uconomy
         public ulong CacheRefreshIntervalMilliseconds { get; set; }
         public byte CacheSize { get; set; }
 
+        public bool SyncBalanceToExp;
         public decimal InitialBalance;
         public string MoneySymbol;
         public string MoneyName;
-
         public string MessageColor;
 
         public void LoadDefaults()
@@ -29,10 +29,11 @@ namespace fr34kyn01535.Uconomy
             DatabaseName = "unturned";
             DatabaseTableName = "uconomy";
             DatabasePort = 3306;
-            InitialBalance = 30;
             UseCache = true;
             CacheRefreshIntervalMilliseconds = 30000;
             CacheSize = 24;
+            SyncBalanceToExp = false;
+            InitialBalance = 30;
             MoneySymbol = "$";
             MoneyName = "Credits";
             MessageColor = "blue";
