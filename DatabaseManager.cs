@@ -29,9 +29,9 @@ namespace fr34kyn01535.Uconomy
         {
             decimal output = 0;
 
-            var result = await ExecuteQueryAsync(new Query(id,
-                $"SELECT `balance` FROM `{Configuration.DatabaseTableName}` WHERE `steamId`=@id;",
-                EQueryType.Scalar, null, true, new MySqlParameter("@id", id)));
+            var result = await ExecuteQueryAsync(new Query(
+                $"SELECT `balance` FROM `{Configuration.DatabaseTableName}` WHERE `steamId`=@id;", EQueryType.Scalar,
+                null, true, new MySqlParameter("@id", id)));
 
             if (result != null) decimal.TryParse(result.ToString(), out output);
             Uconomy.Instance.OnBalanceChecked(id, output);
@@ -51,17 +51,23 @@ namespace fr34kyn01535.Uconomy
 
             await CheckSetupAccount(id);
 
-            await ExecuteQueryAsync(new Query(null,
+            await ExecuteQueryAsync(new Query(
                 $"UPDATE `{Configuration.DatabaseTableName}` SET `balance`=`balance`+@increase WHERE `steamId`=@id;",
-                EQueryType.NonQuery, null, false, new MySqlParameter("@id", id),
+                EQueryType.NonQuery,
+                o => ExecuteTransaction(new Query(
+                    $"SELECT `balance` FROM `{Configuration.DatabaseTableName}` WHERE `steamId`=@id;",
+                    EQueryType.Scalar, null, true, new MySqlParameter("@id", id))), false,
+                new MySqlParameter("@id", id),
                 new MySqlParameter("@increase", increaseBy.ToString(CultureInfo.InvariantCulture))));
 
-            var result = await ExecuteQueryAsync(new Query(id,
+            var result = await ExecuteQueryAsync(new Query(
                 $"SELECT `balance` FROM `{Configuration.DatabaseTableName}` WHERE `steamId`=@id;", EQueryType.Scalar,
                 null, true, new MySqlParameter("@id", id)));
             if (result != null) decimal.TryParse(result.ToString(), out output);
 
             Uconomy.Instance.BalanceUpdated(id, increaseBy);
+
+            if (!Uconomy.Instance.Configuration.Instance.UseCache) return output;
 
             var player = PlayerTool.getPlayer(new CSteamID(id));
 
@@ -78,12 +84,16 @@ namespace fr34kyn01535.Uconomy
 
             await CheckSetupAccount(id);
 
-            await ExecuteQueryAsync(new Query(null,
+            await ExecuteQueryAsync(new Query(
                 $"UPDATE `{Configuration.DatabaseTableName}` SET `balance`=@newBal WHERE `steamId`=@id;",
-                EQueryType.NonQuery, null, false, new MySqlParameter("@id", id),
+                EQueryType.NonQuery,
+                o => ExecuteTransaction(new Query(
+                    $"SELECT `balance` FROM `{Configuration.DatabaseTableName}` WHERE `steamId`=@id;",
+                    EQueryType.Scalar, null, true, new MySqlParameter("@id", id))), false,
+                new MySqlParameter("@id", id),
                 new MySqlParameter("@newBal", value.ToString(CultureInfo.InvariantCulture))));
 
-            var result = await ExecuteQueryAsync(new Query(id,
+            var result = await ExecuteQueryAsync(new Query(
                 $"SELECT `balance` FROM `{Configuration.DatabaseTableName}` WHERE `steamId`=@id;", EQueryType.Scalar,
                 null, true, new MySqlParameter("@id", id)));
             if (result != null) decimal.TryParse(result.ToString(), out output);
@@ -100,13 +110,13 @@ namespace fr34kyn01535.Uconomy
         /// <returns>A bool, where true means the account has been setup, false means it already exists.</returns>
         public async Task<bool> CheckSetupAccount(ulong id)
         {
-            var result = await ExecuteQueryAsync(new Query(id,
+            var result = await ExecuteQueryAsync(new Query(
                 $"SELECT `balance` FROM `{Configuration.DatabaseTableName}` WHERE `steamId`=@id;", EQueryType.Scalar,
                 null, true, new MySqlParameter("@id", id)));
 
             if (result != null && decimal.TryParse(result.ToString(), out _)) return false;
 
-            await ExecuteQueryAsync(new Query(null,
+            await ExecuteQueryAsync(new Query(
                 $"INSERT IGNORE INTO `{Configuration.DatabaseTableName}` (`balance`,`steamId`) values(@initialBalance,@id);",
                 EQueryType.NonQuery, null, false,
                 new MySqlParameter("@initialBalance",
@@ -118,11 +128,11 @@ namespace fr34kyn01535.Uconomy
 
         private void CheckSchema()
         {
-            var test = ExecuteQuery(new Query(null, $"SHOW TABLES LIKE '{Configuration.DatabaseTableName}';",
+            var test = ExecuteQuery(new Query($"SHOW TABLES LIKE '{Configuration.DatabaseTableName}';",
                 EQueryType.Scalar));
 
             if (test.Output == null)
-                ExecuteQuery(new Query(null,
+                ExecuteQuery(new Query(
                     $"CREATE TABLE `{Configuration.DatabaseTableName}` (`steamId` BIGINT UNSIGNED NOT NULL, `balance` decimal(15,2) NOT NULL, `lastUpdated` timestamp NOT NULL DEFAULT NOW() ON UPDATE CURRENT_TIMESTAMP, PRIMARY KEY (`steamId`));",
                     EQueryType.NonQuery));
         }
